@@ -1,5 +1,10 @@
-// 09/05/2020 use this to generate a word list sorted by length:
+// 09/05/2020 4X speedup
+// sort word list by length so that search traverses just once
+// use this to generate a word list sorted by length:
 // cat enable1.txt| perl -nlpe 's/^/100+length($_)/e'|sort|cut -b4-99 > enable1.srtlen
+// 7.7 ms vs. 31.7 ms, so about 4X speedup. Use this for timing:
+// echo #######,ideation > ideation
+// perl -e 'for(1..100){print `./anagram < ideation`}' 
 
 /* anagram.c 
  * Copyright (C) 2004 by aaron w west
@@ -84,6 +89,29 @@ print OF "\0\0";
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// C11 breaks strcpy & strncpy for deleting characters from a buffer (overlapping)
+// https://developer.apple.com/forums/thread/86895
+
+// this worked, though it's a crude hack:
+//#undef strcpy
+//char *mystrcpy(void *dest, void *source)
+//{
+//    size_t sourceLen = strlen(source);
+//    memcpy(dest, source, sourceLen);
+//    *((char*)dest + sourceLen) = '\0'; //null terminate
+//    return dest;
+//}
+//#define strcpy mystrcpy
+
+// Better is:
+void *deleteChar(char *p)
+{
+    while (*p) {
+        *p++ = p[1];
+    }
+    *p = '\0';
+}
 
 /* gcc works but MS VC++ has a 65535 byte limit on literal string constants:
 #include "enable1.c"
@@ -259,8 +287,8 @@ int main(int argc, char *argv[])
     int wordcount, totalcount;
     unsigned c;
     unsigned char *dictbuf;
-    unsigned char pattern[257] = "";
-    unsigned char patbuf[257] = "";
+    unsigned char pattern[128] = "";
+    unsigned char patbuf[128] = "";
     int flags;
     unsigned char *dictfile = "enable1.srtlen"; 
     if (argc > 1 && argv[1][0])
@@ -318,7 +346,8 @@ int main(int argc, char *argv[])
                 wordbuf[8] = '\0';
             } else if (p = strchr(wordbuf, '#'))
             {
-                strcpy(p, p+1);
+                //strcpy(p, p+1); // BUG!
+                deleteChar(p); // avoids __os_crash (due to overlapping buffers)
             } else {
                 printf(" Enter the letters from your rack, X to exit.\n"
                        " Use upper-case to specify required letters, # for blanks.\n"
@@ -337,7 +366,7 @@ int main(int argc, char *argv[])
                 continue;
             }
         } else {
-                pattern[0] = '\0';
+            pattern[0] = '\0';
             strcpy(wordbuf, inbuf);
         }
         l = strlen(wordbuf);
@@ -349,7 +378,7 @@ int main(int argc, char *argv[])
         p = strchr(wordbuf, ',');
         if (p) 
         {
-            strcpy(pattern, p+1);
+            deleteChar(p);
             *p = '\0';
             l = p - wordbuf;
             makelower(pattern);
@@ -360,12 +389,12 @@ int main(int argc, char *argv[])
         p = strchr(patbuf, '$');
         if (p) {
             flags |= END_WORD_FLAG;
-            strcpy(p, p+1);
+            deleteChar(p);
         }
         p = strchr(patbuf, '^');
         if (p) {
             flags |= BEGIN_WORD_FLAG;
-            strcpy(p, p+1);
+            deleteChar(p);
         }
         int minlen = l < thresh ? l : thresh;
         int maxlen = l;
