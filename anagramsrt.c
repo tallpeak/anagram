@@ -93,6 +93,15 @@ print OF "\0\0";
 // C11 breaks strcpy & strncpy for deleting characters from a buffer (overlapping)
 // https://developer.apple.com/forums/thread/86895
 
+// This was happening, an _os_crash due to overlapping buffers, but I saw a "Illegal instruction" error due to the ud2 instruction:
+//libsystem_c.dylib`__chk_fail_overlap.cold.1:
+//    0x7fff7013cfcc <+0>:  pushq  %rbp
+//    0x7fff7013cfcd <+1>:  movq   %rsp, %rbp
+//    0x7fff7013cfd0 <+4>:  leaq   0x6e41(%rip), %rdi        ; "detected source and destination buffer overlap"
+//    0x7fff7013cfd7 <+11>: callq  0x7fff7013acbf            ; _os_crash
+//->  0x7fff7013cfdc <+16>: ud2
+//(lldb) ^D
+
 // this worked, though it's a crude hack:
 //#undef strcpy
 //char *mystrcpy(void *dest, void *source)
